@@ -4,10 +4,12 @@ import (
 	"encoding/binary"
 	"fmt"
 	"net"
+	"strings"
 )
 
 type Message struct {
-	Header Header
+	Header   Header
+	Question Question
 }
 
 type Header struct {
@@ -59,6 +61,91 @@ func (h *Header) toBytes() []byte {
 	return buf
 }
 
+type TYPE uint16
+type CLASS uint16
+
+const (
+	TYPE_A     TYPE = 1
+	TYPE_NS    TYPE = 2
+	TYPE_MD    TYPE = 3
+	TYPE_MF    TYPE = 4
+	TYPE_CNAME TYPE = 5
+	TYPE_SOA   TYPE = 6
+	TYPE_MB    TYPE = 7
+	TYPE_MG    TYPE = 8
+	TYPE_MR    TYPE = 9
+	TYPE_NULL  TYPE = 10
+	TYPE_WKS   TYPE = 11
+	TYPE_PTR   TYPE = 12
+	TYPE_HINFO TYPE = 13
+	TYPE_MINFO TYPE = 14
+	TYPE_MX    TYPE = 15
+	TYPE_TXT   TYPE = 16
+)
+
+const (
+	CLASS_IN CLASS = 1
+	CLASS_CS CLASS = 2
+	CLASS_CH CLASS = 3
+	CLASS_HS CLASS = 4
+)
+
+type Question struct {
+	Name  []byte
+	Type  TYPE
+	Class CLASS
+}
+
+func buildNewQuestion() *Question {
+	return &Question{
+		Name:  []byte{},
+		Type:  TYPE_A,
+		Class: CLASS_IN,
+	}
+}
+
+func (m *Message) encodeDomains(domains []string) {
+	for _, domain := range domains {
+		labels := strings.Split(domain, ".")
+		for _, label := range labels {
+			m.Question.Name = append(m.Question.Name, byte(len(label)))
+			m.Question.Name = append(m.Question.Name, label...)
+		}
+	}
+	m.Question.Name = append(m.Question.Name, '\x00')
+	m.Header.QDCOUNT = uint16(len(domains))
+}
+
+func (m *Message) toBytes() []byte {
+	buf := make([]byte, 0)
+
+	buf = append(buf, m.Header.toBytes()...)
+	buf = append(buf, m.Question.toBytes()...)
+
+	return buf
+}
+
+func (q *Question) toBytes() []byte {
+	buf := make([]byte, 4+len(q.Name))
+
+	copy(buf[0:], q.Name)
+	binary.BigEndian.PutUint16(buf[len(q.Name):len(q.Name)+2], uint16(q.Type))
+	binary.BigEndian.PutUint16(buf[len(q.Name)+2:len(q.Name)+4], uint16(q.Class))
+
+	return buf
+}
+
+func testing() []byte {
+	header := buildNewHeader()
+	question := buildNewQuestion()
+	message := Message{
+		Header:   *header,
+		Question: *question,
+	}
+	message.encodeDomains([]string{"codecrafters.io"})
+	return message.toBytes()
+}
+
 func main() {
 	udpAddr, err := net.ResolveUDPAddr("udp", "127.0.0.1:2053")
 	if err != nil {
@@ -85,8 +172,7 @@ func main() {
 		receivedData := string(buf[:size])
 		fmt.Printf("Received %d bytes from %s: %s\n", size, source, receivedData)
 
-		header := buildNewHeader()
-		response := header.toBytes()
+		response := testing()
 
 		_, err = udpConn.WriteToUDP(response, source)
 		if err != nil {
