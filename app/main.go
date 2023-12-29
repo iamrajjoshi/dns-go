@@ -10,6 +10,32 @@ import (
 type Message struct {
 	Header   Header
 	Question Question
+	Answer   Answer
+}
+
+func encodeDomains(domains []string) []byte {
+	encoding := []byte{}
+
+	for _, domain := range domains {
+		labels := strings.Split(domain, ".")
+		for _, label := range labels {
+			encoding = append(encoding, byte(len(label)))
+			encoding = append(encoding, []byte(label)...)
+		}
+	}
+	encoding = append(encoding, '\x00')
+	fmt.Println(encoding)
+	return encoding
+}
+
+func (m *Message) toBytes() []byte {
+	buf := make([]byte, 0)
+
+	buf = append(buf, m.Header.toBytes()...)
+	buf = append(buf, m.Question.toBytes()...)
+	buf = append(buf, m.Answer.toBytes()...)
+
+	return buf
 }
 
 type Header struct {
@@ -104,27 +130,6 @@ func buildNewQuestion() *Question {
 	}
 }
 
-func (m *Message) encodeDomains(domains []string) {
-	for _, domain := range domains {
-		labels := strings.Split(domain, ".")
-		for _, label := range labels {
-			m.Question.Name = append(m.Question.Name, byte(len(label)))
-			m.Question.Name = append(m.Question.Name, label...)
-		}
-	}
-	m.Question.Name = append(m.Question.Name, '\x00')
-	m.Header.QDCOUNT = uint16(len(domains))
-}
-
-func (m *Message) toBytes() []byte {
-	buf := make([]byte, 0)
-
-	buf = append(buf, m.Header.toBytes()...)
-	buf = append(buf, m.Question.toBytes()...)
-
-	return buf
-}
-
 func (q *Question) toBytes() []byte {
 	buf := make([]byte, 4+len(q.Name))
 
@@ -135,14 +140,58 @@ func (q *Question) toBytes() []byte {
 	return buf
 }
 
+type Answer struct {
+	Name     []byte
+	Type     TYPE
+	Class    CLASS
+	TTL      int32
+	RDLENGTH uint16
+	RDATA    []byte
+}
+
+func buildNewAnswer() *Answer {
+	return &Answer{
+		Name:     []byte{},
+		Type:     TYPE_A,
+		Class:    CLASS_IN,
+		TTL:      60,
+		RDLENGTH: 0,
+		RDATA:    []byte{},
+	}
+}
+
+func (a *Answer) toBytes() []byte {
+	buf := make([]byte, 10+len(a.Name)+len(a.RDATA))
+
+	copy(buf[0:], a.Name)
+	binary.BigEndian.PutUint16(buf[len(a.Name):len(a.Name)+2], uint16(a.Type))
+	binary.BigEndian.PutUint16(buf[len(a.Name)+2:len(a.Name)+4], uint16(a.Class))
+	binary.BigEndian.PutUint32(buf[len(a.Name)+4:len(a.Name)+8], uint32(a.TTL))
+	binary.BigEndian.PutUint16(buf[len(a.Name)+8:len(a.Name)+10], a.RDLENGTH)
+	copy(buf[len(a.Name)+10:], a.RDATA)
+
+	return buf
+}
+
 func testing() []byte {
 	header := buildNewHeader()
 	question := buildNewQuestion()
+	answer := buildNewAnswer()
+
 	message := Message{
 		Header:   *header,
 		Question: *question,
+		Answer:   *answer,
 	}
-	message.encodeDomains([]string{"codecrafters.io"})
+	message.Question.Name = encodeDomains([]string{"codecrafters.io"})
+
+	message.Answer.Name = encodeDomains([]string{"codecrafters.io"})
+	message.Answer.RDLENGTH = 4
+	message.Answer.RDATA = []byte{127, 0, 0, 1}
+
+	message.Header.QDCOUNT = uint16(1)
+	message.Header.ANCOUNT = uint16(1)
+
 	return message.toBytes()
 }
 
