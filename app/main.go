@@ -6,20 +6,8 @@ import (
 )
 
 func processMessage(buf []byte) []byte {
-	// header := buildNewHeader()
-	// question := buildNewQuestion()
-	// answer := buildNewAnswer()
-
-	// message := Message{
-	// 	Header:   *header,
-	// 	Question: *question,
-	// 	Answer:   *answer,
-	// }
 	message := buildResponse(fromBytes(buf))
 
-	message.Question.Name = encodeDomains([]string{"codecrafters.io"})
-
-	message.Answer.Name = encodeDomains([]string{"codecrafters.io"})
 	message.Answer.RDLENGTH = 4
 	message.Answer.RDATA = []byte{127, 0, 0, 1}
 
@@ -27,6 +15,7 @@ func processMessage(buf []byte) []byte {
 	message.Header.ANCOUNT = uint16(1)
 
 	return message.toBytes()
+
 }
 
 func main() {

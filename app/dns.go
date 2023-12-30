@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/binary"
-	"fmt"
 	"strings"
 )
 
@@ -23,7 +22,6 @@ func encodeDomains(domains []string) []byte {
 		}
 	}
 	encoding = append(encoding, '\x00')
-	fmt.Println(encoding)
 	return encoding
 }
 
@@ -48,13 +46,28 @@ func fromBytes(bytes []byte) *Message {
 		ARCOUNT: binary.BigEndian.Uint16(bytes[10:12]),
 	}
 
-	question := buildNewQuestion()
+	// Next bytes are question
+	// parse the name till we get a null byte
+	name := []byte{}
+	i := 12
+	for bytes[i] != '\x00' {
+		name = append(name, bytes[i])
+		i++
+	}
+	name = append(name, '\x00')
+	i++
+
+	question := Question{
+		Name:  name,
+		Type:  TYPE(binary.BigEndian.Uint16(bytes[i : i+2])),
+		Class: CLASS(binary.BigEndian.Uint16(bytes[i+2 : i+4])),
+	}
 
 	answer := buildNewAnswer()
 
 	return &Message{
 		Header:   header,
-		Question: *question,
+		Question: question,
 		Answer:   *answer,
 	}
 }
